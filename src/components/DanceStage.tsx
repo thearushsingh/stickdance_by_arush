@@ -3,11 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Settings, Video, VideoOff, Mic, MicOff,
   FlipHorizontal, Circle, Square, X,
-  Maximize, RotateCcw
+  Maximize, RotateCcw, Music
 } from 'lucide-react';
 import { PoseEngine, type PoseLandmark } from '../engine/PoseEngine';
 import { NeonRenderer } from '../engine/NeonRenderer';
 import { useStore, type NeonTheme, type Background } from '../store';
+import MusicPlayer from './MusicPlayer';
 import './DanceStage.css';
 
 // Theme swatches for the settings panel
@@ -73,6 +74,9 @@ export default function DanceStage({ isSolo = false }: DanceStageProps) {
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [ytVideoId, setYtVideoId] = useState<string | null>(null);
+  const [showMusicInput, setShowMusicInput] = useState(false);
+  const [musicInputUrl, setMusicInputUrl] = useState('');
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -233,38 +237,78 @@ export default function DanceStage({ isSolo = false }: DanceStageProps) {
       // Stop
       recorderRef.current?.stop();
       setIsRecording(false);
-    } else {
-      // Start
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+      return;
+    }
 
-      const stream = canvas.captureStream(30);
-      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9'
-        : 'video/webm';
+    const localCanvas = canvasRef.current;
+    if (!localCanvas) return;
 
-      const recorder = new MediaRecorder(stream, {
-        mimeType,
-        videoBitsPerSecond: 5000000,
-      });
+    const combinedCanvas = document.createElement('canvas');
+    const ctx = combinedCanvas.getContext('2d')!;
+    
+    combinedCanvas.width = localCanvas.width;
+    combinedCanvas.height = localCanvas.height;
 
-      recordChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordChunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(recordChunksRef.current, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `neondance-${Date.now()}.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
-      };
+    combinedCanvas.style.display = 'none';
+    document.body.appendChild(combinedCanvas);
 
-      recorder.start(1000);
-      recorderRef.current = recorder;
-      setIsRecording(true);
+    const stream = combinedCanvas.captureStream(30);
+
+    const drawCombined = () => {
+      if (recorderRef.current?.state !== 'recording') {
+         if (document.body.contains(combinedCanvas)) document.body.removeChild(combinedCanvas);
+         return;
+      }
+      ctx.fillStyle = '#0a0a14';
+      ctx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+      ctx.drawImage(localCanvas, 0, 0);
+
+      if (faceCamRef.current && faceCamRef.current.readyState >= 2) {
+         ctx.save();
+         ctx.translate(combinedCanvas.width - 20, 20);
+         ctx.scale(-1, 1);
+         ctx.drawImage(faceCamRef.current, 0, 0, 160, 120);
+         ctx.restore();
+      }
+      requestAnimationFrame(drawCombined);
+    };
+
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : 'video/webm';
+
+    const recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 5000000,
+    });
+
+    recordChunksRef.current = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordChunksRef.current.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(recordChunksRef.current, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `neondance-solo-${Date.now()}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    recorder.start(1000);
+    recorderRef.current = recorder;
+    setIsRecording(true);
+    drawCombined();
+  };
+
+  const handleMusicSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!musicInputUrl) return;
+    const match = musicInputUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
+    if (match && match[1]) {
+      setYtVideoId(match[1]);
+      setShowMusicInput(false);
     }
   };
 
@@ -345,36 +389,76 @@ export default function DanceStage({ isSolo = false }: DanceStageProps) {
         <div className={`face-camera ${mirrorMode ? 'face-camera-mirrored' : ''}`}>
           <video ref={faceCamRef} playsInline muted autoPlay />
           <span className="face-camera-label">{user?.name || 'You'}</span>
-          <div className="face-camera-controls">
-            <button
-              className="cam-ctrl-btn"
-              onClick={() => setMirrorMode(!mirrorMode)}
-              title="Mirror"
-            >
-              <FlipHorizontal size={12} />
-            </button>
-          </div>
         </div>
       )}
 
       {/* Bottom Controls */}
       {!loading && !error && (
         <div className="bottom-controls">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+          
+          {/* Music Input Modal */}
+          {showMusicInput && (
+            <div style={{ background: 'rgba(10,10,20,0.9)', padding: '15px', borderRadius: '12px', border: '1px solid var(--glass-border)', display: 'flex', gap: '10px' }}>
+              <form onSubmit={handleMusicSubmit} style={{ display: 'flex', gap: '10px' }}>
+                <input 
+                  type="text" 
+                  value={musicInputUrl}
+                  onChange={e => setMusicInputUrl(e.target.value)}
+                  placeholder="Paste YouTube URL..."
+                  style={{ padding: '8px', borderRadius: '6px', border: 'none', background: '#222', color: 'white', outline: 'none' }}
+                />
+                <button type="submit" style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: 'white', cursor: 'pointer' }}>Play</button>
+              </form>
+              <button 
+                onClick={() => { setYtVideoId(null); setShowMusicInput(false); }}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: '#ff3366', color: 'white', cursor: 'pointer' }}
+              >
+                Stop
+              </button>
+            </div>
+          )}
+
           <div className="controls-bar">
             <button
-              className={`ctrl-btn ${isCameraOn ? '' : 'danger'}`}
+              className="ctrl-btn"
+              onClick={() => navigate('/')}
+              title="Exit Solo Mode"
+            >
+              <ArrowLeft size={20} />
+            </button>
+
+            <div className="ctrl-divider" />
+
+            <button
+              className={`ctrl-btn ${isCameraOn ? 'active' : 'inactive'}`}
               onClick={toggleCamera}
               title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
             >
               {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
             </button>
-
             <button
-              className={`ctrl-btn ${isMuted ? 'danger' : ''}`}
+              className={`ctrl-btn ${isMuted ? 'inactive' : 'active'}`}
               onClick={toggleMic}
-              title={isMuted ? 'Unmute' : 'Mute'}
+              title={isMuted ? 'Turn on mic' : 'Turn off mic'}
             >
               {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+            </button>
+
+            <button
+              className={`ctrl-btn ${mirrorMode ? 'active' : ''}`}
+              onClick={() => setMirrorMode(!mirrorMode)}
+              title={mirrorMode ? 'Mirror Off' : 'Mirror On'}
+            >
+              <FlipHorizontal size={20} />
+            </button>
+            
+            <button
+              className={`ctrl-btn ${ytVideoId ? 'active' : ''}`}
+              onClick={() => setShowMusicInput(!showMusicInput)}
+              title="Play Music"
+            >
+              <Music size={20} />
             </button>
 
             <div className="ctrl-divider" />
@@ -404,6 +488,7 @@ export default function DanceStage({ isSolo = false }: DanceStageProps) {
             >
               <Settings size={20} />
             </button>
+          </div>
           </div>
         </div>
       )}
@@ -575,6 +660,14 @@ export default function DanceStage({ isSolo = false }: DanceStageProps) {
             </button>
           </div>
         </div>
+      )}
+      {/* YouTube Music Player */}
+      {ytVideoId && (
+        <MusicPlayer 
+          videoId={ytVideoId} 
+          onSync={() => {}} // No syncing needed for solo mode
+          incomingSyncEvent={null}
+        />
       )}
     </div>
   );

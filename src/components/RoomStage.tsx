@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Video, VideoOff, Mic, MicOff, Maximize, Settings, X, Circle, Music
+  ArrowLeft, Video, VideoOff, Mic, MicOff, Maximize, Settings, X, Circle, Square, Music, RotateCcw, FlipHorizontal
 } from 'lucide-react';
 import { PoseEngine, type PoseLandmark } from '../engine/PoseEngine';
 import { NeonRenderer } from '../engine/NeonRenderer';
@@ -56,8 +56,8 @@ export default function RoomStage() {
 
   // Default to non-mirrored for the local stickman so it follows exact movements,
   // but face camera is typically mirrored so it acts like a mirror.
-  const mirrorMode = true; 
-
+  const mirrorMode = useStore((s) => s.mirrorMode);
+  const setMirrorMode = useStore((s) => s.setMirrorMode);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -487,49 +487,77 @@ export default function RoomStage() {
           )}
 
           <div className="controls-bar">
-          <button
-            className={`ctrl-btn ${!isCameraOn ? 'ctrl-btn-danger' : ''}`}
-            onClick={toggleCamera}
-            title={isCameraOn ? 'Turn camera off' : 'Turn camera on'}
-          >
-            {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
-          </button>
-          <button
-            className={`ctrl-btn ${isMuted ? 'ctrl-btn-danger' : ''}`}
-            onClick={toggleMic}
-            title={isMuted ? 'Unmute' : 'Mute'}
-          >
-            {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
-          </button>
-          <button className="ctrl-btn" onClick={() => document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen()} title="Fullscreen">
-            <Maximize size={20} />
-          </button>
-          
-          <button
-            className={`ctrl-btn ${showMusicInput ? 'ctrl-btn-active' : ''}`}
-            onClick={() => setShowMusicInput(!showMusicInput)}
-            title="Play YouTube Music"
-          >
-            <Music size={20} />
-          </button>
+            <button
+              className="ctrl-btn"
+              onClick={() => {
+                peerEngineRef.current?.destroy();
+                navigate('/');
+              }}
+              title="Leave Room"
+            >
+              <ArrowLeft size={20} />
+            </button>
 
-          {/* Recording Button */}
-          <button
-            className={`ctrl-btn ${isRecording ? 'ctrl-btn-recording' : ''}`}
-            onClick={toggleRecording}
-            title={isRecording ? 'Stop Recording' : 'Start Recording'}
-          >
-            <Circle size={20} className={isRecording ? 'pulse-anim' : ''} fill={isRecording ? 'currentColor' : 'none'} />
-          </button>
-          
-          <div className="ctrl-divider" />
-          <button
-            className={`ctrl-btn ${showSettings ? 'ctrl-btn-active' : ''}`}
-            onClick={() => setShowSettings(!showSettings)}
-            title="Settings"
-          >
-            <Settings size={20} />
-          </button>
+            <div className="ctrl-divider" />
+
+            <button
+              className={`ctrl-btn ${isCameraOn ? 'active' : 'inactive'}`}
+              onClick={toggleCamera}
+              title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+            >
+              {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
+            </button>
+            <button
+              className={`ctrl-btn ${isMuted ? 'inactive' : 'active'}`}
+              onClick={toggleMic}
+              title={isMuted ? 'Turn on mic' : 'Turn off mic'}
+            >
+              {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+            </button>
+
+            <button
+              className={`ctrl-btn ${mirrorMode ? 'active' : ''}`}
+              onClick={() => setMirrorMode(!mirrorMode)}
+              title={mirrorMode ? 'Mirror Off' : 'Mirror On'}
+            >
+              <FlipHorizontal size={20} />
+            </button>
+            
+            <button
+              className={`ctrl-btn ${ytVideoId ? 'active' : ''}`}
+              onClick={() => setShowMusicInput(!showMusicInput)}
+              title="Play Music"
+            >
+              <Music size={20} />
+            </button>
+
+            <div className="ctrl-divider" />
+
+            <button
+              className={`ctrl-btn ${isRecording ? 'recording' : ''}`}
+              onClick={toggleRecording}
+              title={isRecording ? 'Stop Recording' : 'Start Recording'}
+            >
+              {isRecording ? <Square size={18} /> : <Circle size={18} />}
+            </button>
+
+            <button
+              className="ctrl-btn"
+              onClick={() => document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen()}
+              title="Fullscreen"
+            >
+              <Maximize size={18} />
+            </button>
+
+            <div className="ctrl-divider" />
+
+            <button
+              className={`ctrl-btn ${showSettings ? 'active' : ''}`}
+              onClick={() => setShowSettings(!showSettings)}
+              title="Settings"
+            >
+              <Settings size={20} />
+            </button>
           </div>
           </div>
         </div>
@@ -539,72 +567,138 @@ export default function RoomStage() {
       {showSettings && (
         <div className="settings-panel">
           <div className="settings-header">
-            <span>Settings</span>
+            <span className="settings-title">✨ Customize</span>
             <button className="settings-close" onClick={() => setShowSettings(false)}>
-              <X size={16} />
+              <X size={18} />
             </button>
           </div>
 
-          {/* Theme */}
+          {/* Theme Selection */}
           <div className="settings-section">
-            <div className="settings-section-title">Neon Theme</div>
+            <div className="settings-section-title">Neon Color</div>
             <div className="theme-grid">
-              {THEME_SWATCHES.map((t) => (
+              {THEME_SWATCHES.map((sw) => (
                 <button
-                  key={t.id}
-                  className={`theme-swatch ${neonSettings.theme === t.id ? 'selected' : ''}`}
-                  onClick={() => updateNeonSettings({ theme: t.id })}
-                  title={t.label}
+                  key={sw.id}
+                  className={`theme-swatch ${neonSettings.theme === sw.id ? 'selected' : ''}`}
+                  style={{
+                    background:
+                      sw.colors.length > 1
+                        ? `linear-gradient(135deg, ${sw.colors.join(', ')})`
+                        : sw.colors[0],
+                  }}
+                  onClick={() => updateNeonSettings({ theme: sw.id })}
+                  title={sw.label}
                 >
-                  <div
-                    className="swatch-color"
-                    style={{
-                      background: t.colors.length > 1
-                        ? `linear-gradient(135deg, ${t.colors.join(', ')})`
-                        : t.colors[0],
-                    }}
-                  />
-                  <span className="swatch-label">{t.label}</span>
+                  <span className="theme-swatch-label">{sw.label}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Appearance */}
+          {/* Sliders */}
           <div className="settings-section">
             <div className="settings-section-title">Appearance</div>
+
             <div className="setting-row">
               <span className="setting-label">Thickness</span>
-              <input type="range" className="setting-slider" min="2" max="12" step="0.5"
+              <input
+                type="range" className="setting-slider"
+                min="2" max="12" step="0.5"
                 value={neonSettings.thickness}
                 onChange={(e) => updateNeonSettings({ thickness: +e.target.value })}
               />
               <span className="setting-value">{neonSettings.thickness}</span>
             </div>
+
             <div className="setting-row">
               <span className="setting-label">Glow</span>
-              <input type="range" className="setting-slider" min="0" max="2" step="0.1"
+              <input
+                type="range" className="setting-slider"
+                min="0" max="2" step="0.1"
                 value={neonSettings.glowIntensity}
                 onChange={(e) => updateNeonSettings({ glowIntensity: +e.target.value })}
               />
               <span className="setting-value">{neonSettings.glowIntensity.toFixed(1)}</span>
             </div>
+
             <div className="setting-row">
               <span className="setting-label">Bloom</span>
-              <input type="range" className="setting-slider" min="0" max="3" step="0.1"
+              <input
+                type="range" className="setting-slider"
+                min="0" max="3" step="0.1"
                 value={neonSettings.bloomAmount}
                 onChange={(e) => updateNeonSettings({ bloomAmount: +e.target.value })}
               />
               <span className="setting-value">{neonSettings.bloomAmount.toFixed(1)}</span>
             </div>
+
             <div className="setting-row">
               <span className="setting-label">Brightness</span>
-              <input type="range" className="setting-slider" min="0.5" max="2" step="0.1"
+              <input
+                type="range" className="setting-slider"
+                min="0.5" max="2" step="0.1"
                 value={neonSettings.brightness}
                 onChange={(e) => updateNeonSettings({ brightness: +e.target.value })}
               />
               <span className="setting-value">{neonSettings.brightness.toFixed(1)}</span>
             </div>
+          </div>
+
+          {/* Trails */}
+          <div className="settings-section">
+            <div className="settings-section-title">Motion Trails</div>
+
+            <div className="setting-row">
+              <span className="setting-label">Trail Length</span>
+              <input
+                type="range" className="setting-slider"
+                min="0" max="30" step="1"
+                value={neonSettings.trailLength}
+                onChange={(e) => updateNeonSettings({ trailLength: +e.target.value })}
+              />
+              <span className="setting-value">{neonSettings.trailLength}</span>
+            </div>
+
+            <div className="setting-row">
+              <span className="setting-label">Trail Opacity</span>
+              <input
+                type="range" className="setting-slider"
+                min="0" max="1" step="0.05"
+                value={neonSettings.trailOpacity}
+                onChange={(e) => updateNeonSettings({ trailOpacity: +e.target.value })}
+              />
+              <span className="setting-value">{neonSettings.trailOpacity.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Effects */}
+          <div className="settings-section">
+            <div className="settings-section-title">Effects</div>
+
+            <div className="setting-row">
+              <span className="setting-label">Pulse Speed</span>
+              <input
+                type="range" className="setting-slider"
+                min="0" max="5" step="0.25"
+                value={neonSettings.pulseSpeed}
+                onChange={(e) => updateNeonSettings({ pulseSpeed: +e.target.value })}
+              />
+              <span className="setting-value">{neonSettings.pulseSpeed.toFixed(1)}</span>
+            </div>
+
+            {neonSettings.theme === 'rainbow' && (
+              <div className="setting-row">
+                <span className="setting-label">RGB Speed</span>
+                <input
+                  type="range" className="setting-slider"
+                  min="0" max="10" step="0.5"
+                  value={neonSettings.rgbCycleSpeed}
+                  onChange={(e) => updateNeonSettings({ rgbCycleSpeed: +e.target.value })}
+                />
+                <span className="setting-value">{neonSettings.rgbCycleSpeed.toFixed(1)}</span>
+              </div>
+            )}
           </div>
 
           {/* Background */}
@@ -631,6 +725,7 @@ export default function RoomStage() {
                 setBackground('neon-grid');
               }}
             >
+              <RotateCcw size={14} />
               Reset All Settings
             </button>
           </div>
